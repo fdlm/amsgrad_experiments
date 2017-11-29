@@ -4,7 +4,7 @@ import trattoria
 import theano
 import theano.tensor
 from functools import partial
-import sys
+from docopt import docopt
 import os
 
 import yaml
@@ -12,6 +12,38 @@ import yaml
 import models
 import data
 import updates
+
+
+USAGE = """
+Usage:
+  train.py --model=<S> --data=<S> --updater=<S> --n_epochs=<I> 
+           --learning_rate=<F> --beta2=<F> [--bias_correction] [--run_id=<S>]
+"""
+
+
+class Args(object):
+
+    def __init__(self):
+        args = docopt(USAGE)
+        self.model = args['--model']
+        self.data = args['--data']
+        self.updater = args['--updater']
+        self.n_epochs = int(args['--n_epochs'])
+        self.learning_rate = float(args['--learning_rate'])
+        self.beta2 = float(args['--beta2'])
+        self.bias_correction = args['--bias_correction']
+        self.run_id = args['--run_id']
+
+    def dump(self, stream):
+        yaml.dump(dict(
+            model=self.model,
+            data=self.data,
+            updater=self.updater,
+            n_epochs=self.n_epochs,
+            learning_rate=self.learning_rate,
+            beta2=self.beta2,
+            bias_correction=self.bias_correction,
+            run_id=self.run_id), stream)
 
 
 def mirror_images(batches):
@@ -24,30 +56,21 @@ def mirror_images(batches):
 
 
 def main():
-    if len(sys.argv) < 4:
-        print('Usage:\n  train.py <model> <data> <updater> [<updater_params>]')
-        return 1
+    args = Args()
 
-    create_model = getattr(models, sys.argv[1])
-    load_data = getattr(data, sys.argv[2])
-    updater = getattr(updates, sys.argv[3])
+    create_model = getattr(models, args.model)
+    load_data = getattr(data, args.data)
+    updater = getattr(updates, args.updater)
 
-    if len(sys.argv) == 5:
-        print(sys.argv[4])
-        updater_params = yaml.load(sys.argv[4])
-        print(updater_params)
-    else:
-        updater_params = {}
-
-    param_str = yaml.dump(updater_params).replace(' ', '_').strip()
-    out_dir = os.path.join(
-        'experiments',
-        sys.argv[1] + '_' + sys.argv[2] + '_' + sys.argv[3] + '_' + param_str)
+    param_str = '(n={}_lr={}_b2={}_bc={})'.format(
+        args.n_epochs, args.learning_rate, args.beta2, args.bias_correction)
+    exp_id = '_'.join([args.model, args.data, args.updater, param_str])
+    if args.run_id:
+        exp_id += '_' + args.run_id
+    out_dir = os.path.join('experiments', exp_id)
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
-    yaml.dump(dict(model=sys.argv[1], data=sys.argv[2], updater=sys.argv[3],
-                   updater_params=updater_params),
-              open(os.path.join(out_dir, 'config.yaml'), 'w'))
+    args.dump(open(os.path.join(out_dir, 'config.yaml'), 'w'))
 
     print('Loading data...')
     X_train, y_train, X_test, y_test = load_data()
@@ -80,23 +103,30 @@ def main():
         }
     )
 
-    updater = partial(updater, **updater_params)
+    lr = theano.shared(np.float32(args.learning_rate), name='learning_rate',
+                       allow_downcast=True)
+    learn_rate_schedule = trattoria.schedules.Linear(
+        lr, start_epoch=0, end_epoch=args.n_epochs, target_value=0.)
+    updater = partial(updater, learning_rate=lr, beta2=args.beta2,
+                      bias_correction=args.bias_correction)
 
     print('\nTraining:\n')
 
     trattoria.training.train(
         net=net,
         train_batches=train_batches,
-        num_epochs=500,
+        num_epochs=args.n_epochs,
         observables={
             'loss': trattoria.objectives.average_categorical_crossentropy,
             'acc': trattoria.objectives.average_categorical_accuracy,
+            'lr': lambda *_: lr
         },
         updater=updater,
         validator=val,
         logs=[trattoria.outputs.ConsoleLog(),
               trattoria.outputs.YamlLog(
                   os.path.join(out_dir, 'train_log.yaml'))],
+        callbacks=[learn_rate_schedule]
     )
 
 
