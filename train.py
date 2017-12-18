@@ -5,6 +5,7 @@ import theano
 import theano.tensor
 from functools import partial
 from docopt import docopt
+import lasagne as lnn
 import os
 
 import yaml
@@ -18,6 +19,7 @@ USAGE = """
 Usage:
   train.py --model=<S> --data=<S> --updater=<S> --n_epochs=<I> 
            --learning_rate=<F> --beta2=<F> [--bias_correction] [--run_id=<S>]
+           [--no_annealing] [--l2=<F>]
 """
 
 
@@ -33,6 +35,8 @@ class Args(object):
         self.beta2 = float(args['--beta2'])
         self.bias_correction = args['--bias_correction']
         self.run_id = args['--run_id']
+        self.no_annealing = args['--no_annealing']
+        self.l2 = float(args['--l2']) if args['--l2'] else None
 
     def dump(self, stream):
         yaml.dump(dict(
@@ -43,7 +47,9 @@ class Args(object):
             learning_rate=self.learning_rate,
             beta2=self.beta2,
             bias_correction=self.bias_correction,
-            run_id=self.run_id), stream)
+            run_id=self.run_id,
+            no_annealing=self.no_annealing,
+            l2=self.l2), stream)
 
 
 def mirror_images(batches):
@@ -105,12 +111,23 @@ def main():
 
     lr = theano.shared(np.float32(args.learning_rate), name='learning_rate',
                        allow_downcast=True)
-    learn_rate_schedule = trattoria.schedules.Linear(
-        lr, start_epoch=0, end_epoch=args.n_epochs, target_value=0.)
+
+    if args.no_annealing:
+        callbacks = []
+    else:
+        callbacks = [trattoria.schedules.Linear(
+            lr, start_epoch=0, end_epoch=args.n_epochs, target_value=0.)]
+
     updater = partial(updater, learning_rate=lr, beta2=args.beta2,
                       bias_correction=args.bias_correction)
 
     print('\nTraining:\n')
+
+    if args.l2:
+        regularizers = [lnn.regularization.regularize_network_params(
+            net.net, lnn.regularization.l2) * np.float32(args.l2)]
+    else:
+        regularizers = None
 
     trattoria.training.train(
         net=net,
@@ -123,10 +140,11 @@ def main():
         },
         updater=updater,
         validator=val,
+        regularizers=regularizers,
         logs=[trattoria.outputs.ConsoleLog(),
               trattoria.outputs.YamlLog(
                   os.path.join(out_dir, 'train_log.yaml'))],
-        callbacks=[learn_rate_schedule]
+        callbacks=callbacks
     )
 
 
