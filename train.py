@@ -52,15 +52,6 @@ class Args(object):
             l2=self.l2), stream)
 
 
-def mirror_images(batches):
-    for images, labels in batches:
-        fl = np.random.randint(0, 2, images.shape[0])
-        for i in xrange(images.shape[0]):
-            if fl[i]:
-                images[i] = images[i, :, :, ::-1]
-        yield images, labels
-
-
 def main():
     args = Args()
 
@@ -79,7 +70,7 @@ def main():
     args.dump(open(os.path.join(out_dir, 'config.yaml'), 'w'))
 
     print('Loading data...')
-    X_train, y_train, X_test, y_test = load_data()
+    X_train, y_train, X_test, y_test, augment_fun = load_data()
     training_set = trattoria.data.DataSource([X_train, y_train])
     test_set = trattoria.data.DataSource([X_test, y_test])
 
@@ -94,7 +85,7 @@ def main():
             batch_size=128,
             shuffle=True
         ),
-        mirror_images
+        augment_fun
     )
     val_batches = trattoria.iterators.BatchIterator(
         datasource=test_set,

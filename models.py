@@ -3,6 +3,13 @@ from lasagne.nonlinearities import *
 from lasagne.init import *
 
 
+def logreg(in_shape, n_classes):
+    net = InputLayer(shape=(None,) + in_shape, name='Input')
+    net = DenseLayer(net, num_units=n_classes, nonlinearity=softmax,
+                     name='Output', b=Constant(0.))
+    return net
+
+
 def small_vgg(in_shape, n_classes):
     """ Compile net architecture """
     nonlin = rectify
@@ -10,7 +17,7 @@ def small_vgg(in_shape, n_classes):
     def init_conv():
         return HeNormal('relu')
 
-    def conv_bn(in_layer, num_filters, filter_size, nonlinearity=rectify, pad):
+    def conv_bn(in_layer, num_filters, filter_size, nonlinearity, pad):
         in_layer = Conv2DLayer(in_layer, num_filters=num_filters,
                                filter_size=filter_size,
                                nonlinearity=nonlinearity, pad=pad, name='conv',

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-DEVICE=cuda1
+DEVICE=cuda0
 
 for RUN in 0 1 2 3 4; do
     for LR in 0.001 0.01 0.0001; do
