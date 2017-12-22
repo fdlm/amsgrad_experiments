@@ -1,0 +1,2 @@
+{beta2: 0.99, bias_correction: false, data: cifar10, l2: null, learning_rate: 0.0001,
+  model: small_vgg, n_epochs: 150, no_annealing: false, run_id: '0', updater: amsgrad}

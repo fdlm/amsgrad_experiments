@@ -1,0 +1,1 @@
+{beta2: 0.99, data: cifar10, learning_rate: 0.01, model: vgg, n_epochs: 150, updater: adam}

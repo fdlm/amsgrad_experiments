@@ -1,0 +1,2 @@
+{beta2: 0.99, bias_correction: false, data: cifar10, learning_rate: 0.0001, model: vgg,
+  n_epochs: 150, updater: adam}
